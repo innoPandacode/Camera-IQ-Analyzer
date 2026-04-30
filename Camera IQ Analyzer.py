@@ -27,7 +27,7 @@ except ImportError:
 # 1. 核心定義與規格
 # ==========================================
 APP_NAME = "Camera IQ Analyzer"
-VERSION = "20260320"
+VERSION = "20260430"
 ICON_NAME = "ImatestAnalyzer_icon.ico"
 
 class Status(Enum):
@@ -345,7 +345,7 @@ class AnalyzerApp:
         # 左下角 2：狀態文字 (排在版本資訊的右邊)
         self.stat_lbl = ttk.Label(bot, text="狀態: 準備就緒", font=('Microsoft JhengHei', 10))
         self.stat_lbl.pack(side=LEFT)
-        ttk.Button(bot, text="下載報表", command=self._download_csv, bootstyle=INFO).pack(side=RIGHT, padx=5)
+        ttk.Button(bot, text="下載報表 (.xlsx)", command=self._download_csv, bootstyle=INFO).pack(side=RIGHT, padx=5)
         ttk.Button(bot, text="複製結果", command=self._copy_excel, bootstyle=SUCCESS).pack(side=RIGHT, padx=5)
 
         self.notebook = ttk.Notebook(self.root, bootstyle=INFO); self.notebook.pack(side=TOP, fill=BOTH, expand=True, padx=15, pady=5)
@@ -443,7 +443,20 @@ class AnalyzerApp:
                     # INFO 或 "--" 保持預設黑字
 
         self.sheet.redraw()
-        self.detail_text.insert(END, json.dumps(logs, indent=4, ensure_ascii=False))
+        self.detail_logs = logs
+
+        version_header = (
+            f"{APP_NAME}\n"
+            f"Version: {VERSION}\n"
+            f"Generated Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+            f"{'='*60}\n\n"
+        )
+
+        self.detail_text.insert(
+            END,
+            version_header + json.dumps(logs, indent=4, ensure_ascii=False)
+        )
+
         self.stat_lbl.config(text=f"狀態: 分析完成")
 
     def _copy_excel(self):
@@ -452,9 +465,50 @@ class AnalyzerApp:
         messagebox.showinfo("成功", "內容已複製。")
 
     def _download_csv(self):
-        if self.summary_df.empty: return
-        f = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV", "*.csv")], initialfile=f"Report_{datetime.now().strftime('%Y%m%d')}.csv")
-        if f: self.summary_df.to_csv(f, index=False, encoding='utf-8-sig'); messagebox.showinfo("成功", "報表已儲存。")
+        if self.summary_df.empty:
+            return
+        f = filedialog.asksaveasfilename(
+            defaultextension=".xlsx",
+            filetypes=[("Excel 活頁簿", "*.xlsx")],
+            initialfile=f"Report_{datetime.now().strftime('%Y%m%d')}.xlsx"
+        )
+        if not f:
+            return
+        try:
+            log_rows = []
+            for entry in self.detail_logs:
+                log_rows.append({
+                    "測項 (Item)": entry.get("測項 (Item)", ""),
+                    "階段 (Stage)": entry.get("階段 (Stage)", ""),
+                    "分析詳情 (Details)": json.dumps(entry.get("分析詳情 (Details)", {}), ensure_ascii=False, indent=2)
+                })
+            log_df = pd.DataFrame(log_rows)
+
+            with pd.ExcelWriter(f, engine='openpyxl') as writer:
+                self.summary_df.to_excel(writer, sheet_name='總結報表', index=False)
+                log_df.to_excel(
+                    writer,
+                    sheet_name='分析詳情',
+                    index=False,
+                    startrow=4
+                )
+
+                ws_log = writer.sheets['分析詳情']
+
+                ws_log['A1'] = APP_NAME
+                ws_log['A2'] = f"Version: {VERSION}"
+                ws_log['A3'] = f"Generated Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+
+                # 自動調整欄寬
+                for sheet_name in writer.sheets:
+                    ws = writer.sheets[sheet_name]
+                    for col in ws.columns:
+                        max_len = max((len(str(cell.value)) if cell.value else 0) for cell in col)
+                        ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 80)
+
+            messagebox.showinfo("成功", f"報表已儲存（含分析詳情）：\n{f}")
+        except Exception as e:
+            messagebox.showerror("錯誤", f"儲存失敗：{e}")
 
 if __name__ == "__main__":
     app_root = ttk.Window(themename="cosmo")
