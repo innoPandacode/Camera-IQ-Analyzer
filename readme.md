@@ -43,7 +43,7 @@ IQ Analyzer 是一套專為影像品質（Image Quality, IQ）測試設計的自
 | 14 | Color Shading  | 5000K | A64                            | A65-C65  | < 5%    | shading_diff   |
 | 15 | Color Shading  | 6500K | A64                            | A65-C65  | < 5%    | shading_diff   |
 | 16 | Dynamic Range  | D65   | D129                           | D132     | INFO    | conditional_dr |
-| 17 | MTF50P         | D65   | C欄 = "14 Y" 或 "14 L          | J欄       | INFO    | mtf_multi_row  |
+| 17 | MTF50P         | D65   | C欄 = "14 Y" 或 "14 L"         | J欄       | INFO    | mtf_multi_row  |
 
 ---
 
