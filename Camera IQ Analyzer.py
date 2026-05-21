@@ -1,4 +1,6 @@
 import os
+import sys
+import ctypes
 import re
 import csv
 import json
@@ -27,7 +29,7 @@ except ImportError:
 # 1. 核心定義與規格
 # ==========================================
 APP_NAME = "Camera IQ Analyzer"
-VERSION = "20260430"
+VERSION = "20260521"
 ICON_NAME = "ImatestAnalyzer_icon.ico"
 
 class Status(Enum):
@@ -62,7 +64,7 @@ TEST_RULES = [
     {"id": 16, "name": "Dynamic Range", "light": "D65", "type": "conditional_dr", "anchor": ("D129", "DR (dB)"), "cond": ("B132", "LOW"), "target": "D132", "spec": None, "criteria": "-"},
     
     # [修改這裡] 針對 MTF50P 設定特殊規則：以 C 欄找 "14 Y"，並去 J 欄拿值
-    {"id": 17, "name": "MTF50P", "light": "D65", "type": "mtf_multi_row", "anchor": ("C", "14 Y"), "target": "J", "spec": None, "criteria": "-"}
+    {"id": 17, "name": "MTF50P", "light": "D65", "type": "mtf_multi_row", "anchor": ("C", ["14 Y", "14 L"]), "target": "J", "spec": None, "criteria": "-"}
 ]
 
 # ==========================================
@@ -101,7 +103,8 @@ class Extractor:
                 if rule["type"] == "mtf_multi_row":
                     a_col, a_key = rule["anchor"]
                     c_idx = self.reader.excel_to_index(a_col + "1")[1] # 取得欄位 Index
-                    if any(len(r) > c_idx and str(r[c_idx]).strip() == a_key for r in rows):
+                    anchor_values = a_key if isinstance(a_key, list) else [a_key]
+                    if any(len(r) > c_idx and str(r[c_idx]).strip() in anchor_values for r in rows):
                         file_info = files_df[files_df['path'] == path].iloc[0]
                         eligible_files.append({"path": path, "rows": rows, "ctime": file_info['ctime'], "name": file_info['name']})
                 else:
@@ -123,8 +126,9 @@ class Extractor:
                     j_idx = self.reader.excel_to_index(rule["target"] + "1")[1]
                     
                     match_count = 0
+                    anchor_values = rule["anchor"][1] if isinstance(rule["anchor"][1], list) else [rule["anchor"][1]]
                     for r_idx, row in enumerate(rows):
-                        if len(row) > c_idx and str(row[c_idx]).strip() == rule["anchor"][1]:
+                        if len(row) > c_idx and str(row[c_idx]).strip() in anchor_values:
                             raw_val = row[j_idx] if len(row) > j_idx else None
                             val = self._clean_num(raw_val)
                             
@@ -320,18 +324,37 @@ class AnalyzerApp:
         self._set_app_icon()
         self._build_ui()
 
+    def _resource_path(self, relative_path):
+        """
+        讓開發環境與 PyInstaller 打包後都能正確找到資源檔。
+        """
+        if hasattr(sys, "_MEIPASS"):
+            base_path = sys._MEIPASS
+        else:
+            base_path = os.path.dirname(os.path.abspath(__file__))
+
+        return os.path.join(base_path, relative_path)
+
     def _set_app_icon(self):
-            # 取得目前這個 Python 檔案所在的絕對資料夾路徑
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            # 組合出 .ico 檔案的完整絕對路徑
-            icon_path = os.path.join(current_dir, ICON_NAME)
-            
-            # 檢查檔案是否存在，存在才載入，避免報錯
-            if os.path.exists(icon_path):
-                try:
-                    self.root.iconbitmap(icon_path)
-                except Exception as e:
-                    print(f"載入圖示失敗: {e}")
+        """
+        設定 Windows 視窗左上角 icon 與工作列 icon。
+        """
+        try:
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+                "innodisk.camera_iq_analyzer"
+            )
+        except Exception as e:
+            print(f"設定 AppUserModelID 失敗: {e}")
+
+        icon_path = self._resource_path(ICON_NAME)
+
+        if os.path.exists(icon_path):
+            try:
+                self.root.iconbitmap(icon_path)
+            except Exception as e:
+                print(f"載入圖示失敗: {e}")
+        else:
+            print(f"找不到圖示檔案: {icon_path}")
 
     def _build_ui(self):
         top = ttk.Frame(self.root, padding=(15, 10)); top.pack(side=TOP, fill=X)
