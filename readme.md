@@ -1,134 +1,153 @@
-# IQ Analyzer 📷📊
+# Camera IQ Analyzer
 
-IQ Analyzer 是一套專為影像品質（Image Quality, IQ）測試設計的自動化數據分析與判讀工具。
-本程式透過動態錨點（Anchor-based）技術掃描 Imatest 或其他儀器輸出的 CSV 報表，自動萃取關鍵數據、套用內建 Spec 進行 Pass/Fail 判定，並支援「三戰兩勝」驗證機制。
+**Version: 20260608**
 
----
-
-## ✨ 核心功能 (Features)
-
-* **動態錨點定位 (Dynamic Anchor Extraction)**
-  利用關鍵字作為錨點定位數據，提升不同 CSV 格式的容錯能力。
-
-* **三戰兩勝判定機制 (Best 2 out of 3)**
-  當同一測項有三次以上結果時，兩次 PASS 即為最終 PASS；不足三次時，只要有 FAIL 即判定 FAIL。
-
-* **白盒化分析詳情 (Traceability Log)**
-  提供完整數據來源、計算過程與判斷依據。
-
-* **GUI 操作介面**
-  支援表格高亮顯示、一鍵複製與 CSV 匯出。
+Imatest 影像品質測試結果自動判定工具。讀取 Imatest 輸出的 CSV 與 AE 報告，自動計算 PASS/FAIL，並以 GUI 呈現結果與詳細分析紀錄。
 
 ---
 
-## 📋 測試規格 (Test Specifications)
+## 功能概覽
 
-共內建 17 項測試項目，涵蓋 Color、WB、SNR、Shading、DR、MTF 等指標。
-
-| ID | Item           | Light | Anchor                         | Target   | Spec    | Type           |
-| -- | -------------- | ----- | ------------------------------ | -------- | ------- | -------------- |
-| 1  | Color Accuracy | A     | A175 = "Max Delta-C_00 uncorr" | B175     | <= 18   | single         |
-| 2  | Color Accuracy | CWF   | A175 = "Max Delta-C_00 uncorr" | B175     | <= 15   | single         |
-| 3  | Color Accuracy | D65   | A175 = "Max Delta-C_00 uncorr" | B175     | <= 15   | single         |
-| 4  | Mean Chroma    | A     | A151 = "Mean camera chroma %"  | B151     | 85~130% | single         |
-| 5  | Mean Chroma    | CWF   | A151 = "Mean camera chroma %"  | B151     | 85~130% | single         |
-| 6  | Mean Chroma    | D65   | A151 = "Mean camera chroma %"  | B151     | 85~130% | single         |
-| 7  | White Balance  | A     | M11 = "WB Delta-C 00"          | M13-15   | < 7     | multi_max      |
-| 8  | White Balance  | CWF   | M11 = "WB Delta-C 00"          | M13-15   | < 7     | multi_max      |
-| 9  | White Balance  | D65   | M11 = "WB Delta-C 00"          | M13-15   | < 7     | multi_max      |
-| 10 | SNR            | D65   | F102 = "Y-SNR(dB)"             | F103-122 | INFO    | snr_max        |
-| 11 | Y Shading      | 6500K | A18                            | B18      | > 85%   | single         |
-| 12 | Color Shading  | 3000K | A64                            | A65-C65  | < 5%    | shading_diff   |
-| 13 | Color Shading  | 4000K | A64                            | A65-C65  | < 5%    | shading_diff   |
-| 14 | Color Shading  | 5000K | A64                            | A65-C65  | < 5%    | shading_diff   |
-| 15 | Color Shading  | 6500K | A64                            | A65-C65  | < 5%    | shading_diff   |
-| 16 | Dynamic Range  | D65   | D129                           | D132     | INFO    | conditional_dr |
-| 17 | MTF50P         | D65   | C欄 = "14 Y" 或 "14 L"         | J欄       | INFO    | mtf_multi_row  |
+| 功能 | 說明 |
+|------|------|
+| 自動掃描 | 選擇測試資料夾後，自動遞迴尋找符合條件的 CSV 與 AE txt |
+| 三戰兩勝判定 | 同一測項 3 次測試中 ≥2 次 PASS 則整體判定為 PASS |
+| 檔案設定 | 以測試項目為單位，手動指定每輪使用的 CSV／AE txt，不受資料夾結構限制 |
+| AE 分析 | 解析 `AE_Report_Data_*.txt`，判定曝光一致性（Avg ±5%） |
+| 報表匯出 | 下載含總結報表與分析詳情的 `.xlsx` |
+| 複製結果 | 一鍵複製 TSV 格式，可直接貼入 Excel |
 
 ---
 
-## 🔍 抓取邏輯 (Extraction Types)
+## 測試項目（共 18 項）
 
-### single
+| # | 測項名稱 | 燈光條件 | Spec |
+|---|---------|---------|------|
+| 1 | Color Accuracy | A/Fixed | ≤18 |
+| 2 | Color Accuracy | CWF/600lux | ≤15 |
+| 3 | Color Accuracy | D65/Fixed | ≤15 |
+| 4 | Mean Chroma | A/Fixed | 85~130% |
+| 5 | Mean Chroma | CWF/600lux | 85~130% |
+| 6 | Mean Chroma | D65/Fixed | 85~130% |
+| 7 | White Balance | A/Fixed | <7 |
+| 8 | White Balance | CWF/600lux | <7 |
+| 9 | White Balance | D65/Fixed | <7 |
+| 10 | SNR | D65/600Lux | INFO |
+| 11 | Y Shading | 6500K/1000lux | >85% |
+| 12 | Color Shading | 3000K/1000lux | <5% |
+| 13 | Color Shading | 4000K/1000lux | <5% |
+| 14 | Color Shading | 5000K/1000lux | <5% |
+| 15 | Color Shading | 6500K/1000lux | <5% |
+| 16 | Dynamic Range | D65/600Lux | INFO |
+| 17 | MTF50P | D65/600Lux | INFO |
+| 18 | AE | 4870K | Avg ±5% |
 
-直接抓取單一數值。
-
-* 特例：Mean Chroma < 2 時自動轉為百分比。
-
-### multi_max
-
-多點取最大值後比對 Spec。
-
-### shading_diff
-
-計算偏差值：
-
-```
-abs(1 - ratio) * 100
-```
-
-取最大偏差。
-
-### snr_max
-
-在範圍內取最大值。
-
-### conditional_dr
-
-先檢查條件，再抓取數值。
-
-### mtf_multi_row
-
-逐列掃描關鍵字並抓取對應數值。
+> **INFO 項目**（10、16、17）：僅記錄數值，不參與 PASS/FAIL 判定。
 
 ---
 
-## 📂 資料夾結構 (Folder Structure)
+## 操作流程
 
-需依光源分類資料夾：
+### 標準流程
 
-```
-Test_Data_Folder/
-├── D65/
-├── CWF/
-└── 3000/
-```
+1. 點擊「**選擇測試資料夾**」
+2. 程式自動掃描 CSV 與 AE txt，執行分析並停在「**總結報表**」
+3. 綠色 = PASS，紅色 = FAIL
+4. 切到「**分析詳情**」可查看每個測項的錨點、原始值、計算過程
 
-支援關鍵字：A, CWF, D65, 3000, 4000, 5000, 6500
+### 手動指定檔案（適用於需要選取特定輪次的情境）
 
----
+> 例：做了 5 次測試，但只想取第 1、4、5 次的結果。
 
-## 🚀 使用方式 (Usage)
-
-### 1. 安裝
-
-```
-pip install pandas ttkbootstrap tksheet
-```
-
-### 2. 執行
-
-```
-python analyzer.py
-```
-
-### 3. 操作流程
-
-1. 選擇資料夾
-2. 檢視總結報表
-3. 查看分析詳情
-4. 複製或匯出結果
+1. 先完成「選擇測試資料夾」（自動填入預設分配）
+2. 切到「**檔案設定**」Tab
+3. 找到目標測項與對應輪次，點「**選擇檔案**」從檔案總管指定 CSV
+4. AE 區段同樣可指定 `.txt` 檔
+5. 按「**✕**」可清空不需要的輪次（不計入該輪判定）
+6. 點「**套用並更新報表**」→ 自動切回總結報表，分析詳情同步更新
 
 ---
 
-## 📌 說明
+## Tab 說明
 
-* 本工具適用於 Imatest CSV 分析
-* 支援多次測試結果整合
-* 提供完整數據可追溯性
+| Tab | 功能 |
+|-----|------|
+| 總結報表 | 18 項測試數值（最多三輪）與最終 Result |
+| AE 分析 | 載入影像分析曝光一致性，結果自動寫入總結報表第 18 列 |
+| 檔案設定 | 以測試項目分組，每輪可獨立選擇 CSV／AE txt 或清空 |
+| 分析詳情 | JSON 格式完整分析 log，含錨點座標、原始值、計算過程 |
 
 ---
 
-## 📬 聯絡
+## 資料夾結構要求（自動掃描模式）
 
-如需擴充 Spec 或客製化功能，請聯絡開發者。
+CSV 必須放在含有燈光條件名稱的子資料夾內：
+
+```
+測試資料夾/
+├── A/                        ← A/Fixed
+│   ├── run1.csv
+│   ├── run2.csv
+│   └── run3.csv
+├── CWF/                      ← CWF/600lux
+├── D65/                      ← D65/Fixed
+├── 3000/                     ← 3000K/1000lux
+├── 4000/
+├── 5000/
+├── 6500/                     ← Y Shading & Color Shading
+└── （任意路徑）/
+    └── AE_Report_Data_*.txt  ← AE 報告，遞迴搜尋
+```
+
+> 若結構不符，請改用「**檔案設定**」Tab 手動指定。
+
+---
+
+## 環境需求
+
+| 項目 | 版本 |
+|------|------|
+| Python | 3.12 |
+| ttkbootstrap | 1.20.2 |
+| tksheet | 7.6.0 |
+| openpyxl | 3.1.5 |
+| Pillow | 12.2.0 |
+| pandas | — |
+| opencv-python | — |
+| numpy | — |
+
+> 套件版本直接影響 GUI 行為，升版前需手動驗證外觀與功能。
+
+---
+
+## 執行方式
+
+```powershell
+.\venv\Scripts\activate
+python "Camera IQ Analyzer.py"
+```
+
+---
+
+## 打包成 .exe
+
+```powershell
+.\venv\Scripts\activate
+python -m PyInstaller --clean --onedir --windowed --noupx `
+    --name "CameraIQAnalyzer" `
+    --icon "ImatestAnalyzer_icon.ico" `
+    --add-data "ImatestAnalyzer_icon.ico;." `
+    "Camera IQ Analyzer.py"
+```
+
+輸出位置：`dist\CameraIQAnalyzer\CameraIQAnalyzer.exe`
+
+> `--noupx` 與 `--onedir` 組合為必要參數，可避免防毒軟體誤判，請勿改用 `.spec` 檔直接執行。
+
+---
+
+## 注意事項
+
+- **CSV 解析使用動態錨點定位**：依特定儲存格字串定位數值，Imatest 版本更新若改變輸出格式，錨點可能失效，需同步修改對應規則
+- **GUI 僅支援 Windows**：依賴 tkinter，不支援 Linux／macOS
+- **AE 分析模組獨立**：AE Tab 的分析結果在同 session 內會暫存，重新選擇資料夾後自動以資料夾內 txt 為準
