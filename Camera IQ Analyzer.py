@@ -33,7 +33,7 @@ except ImportError:
 # 1. 核心定義與規格
 # ==========================================
 APP_NAME = "Camera IQ Analyzer"
-VERSION = "20260608"
+VERSION = "20260609"
 ICON_NAME = "ImatestAnalyzer_icon.ico"
 
 
@@ -689,6 +689,7 @@ class FileAssignTab(ttk.Frame):
         self._canvas.bind("<Configure>", lambda e: self._canvas.itemconfig(self._win_id, width=e.width))
         self._canvas.bind("<Enter>", lambda e: self._canvas.bind_all("<MouseWheel>", self._on_mousewheel))
         self._canvas.bind("<Leave>", lambda e: self._canvas.unbind_all("<MouseWheel>"))
+        self._rebuild_rows()
 
     def _on_mousewheel(self, event):
         self._canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
@@ -700,7 +701,7 @@ class FileAssignTab(ttk.Frame):
 
         # 建立 light -> [path sorted by ctime] 的對照
         pool: Dict[str, List[str]] = {}
-        for _, row in files_df.sort_values("ctime").iterrows():
+        for _, row in (files_df.sort_values("ctime") if not files_df.empty else files_df).iterrows():
             pool.setdefault(row["light"], []).append(row["path"])
 
         # 每條規則依其 light 取前 3 個檔案對應三輪
@@ -719,7 +720,10 @@ class FileAssignTab(ttk.Frame):
                     self._ae_assign[rl] = txts[i]
 
         csv_count = sum(len(v) for v in pool.values())
-        self.info_lbl.config(text=f"掃描到 {csv_count} 個 CSV。請確認各測項對應檔案，或按「選擇檔案」手動指定。")
+        if csv_count == 0:
+            self.info_lbl.config(text="未找到 CSV 檔案，僅顯示 AE 資料。可按「選擇檔案」手動指定。")
+        else:
+            self.info_lbl.config(text=f"掃描到 {csv_count} 個 CSV。請確認各測項對應檔案，或按「選擇檔案」手動指定。")
         self._rebuild_rows()
 
     def _rebuild_rows(self):
@@ -1002,18 +1006,17 @@ class AnalyzerApp:
         self.path_var.set(path)
         f_df = Scanner.scan_deep(path)
         if f_df.empty:
-            self.stat_lbl.config(text="狀態: 找不到符合的 CSV 檔案")
-            return
+            self.stat_lbl.config(text="狀態: 找不到 CSV，嘗試讀取 AE 資料...")
         self.tab_assign.load(f_df, base_path=path)
         self._execute_analysis(f_df)
 
     def _apply_assign(self):
         """由「檔案設定」Tab 的「套用並更新報表」按鈕觸發。"""
         assignment = self.tab_assign.get_assignment()
-        if not assignment:
-            messagebox.showwarning("無資料", "沒有可分析的 CSV 分配，請先選擇測試資料夾。")
-            return
         ae_assignment = self.tab_assign.get_ae_assignment()
+        if not assignment and not ae_assignment:
+            messagebox.showwarning("無資料", "請至少指定一個 CSV 或 AE 報告檔案。")
+            return
         self._execute_analysis(pd.DataFrame(), assignment=assignment, ae_assignment=ae_assignment)
 
     def _execute_analysis(
