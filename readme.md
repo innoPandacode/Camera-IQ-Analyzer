@@ -1,6 +1,6 @@
 # Camera IQ Analyzer
 
-**Version: 20260608**
+**Version: 20260609**
 
 Imatest 影像品質測試結果自動判定工具。讀取 Imatest 輸出的 CSV 與 AE 報告，自動計算 PASS/FAIL，並以 GUI 呈現結果與詳細分析紀錄。
 
