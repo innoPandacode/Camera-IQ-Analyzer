@@ -33,7 +33,7 @@ except ImportError:
 # 1. 核心定義與規格
 # ==========================================
 APP_NAME = "Camera IQ Analyzer"
-VERSION = "20260609"
+VERSION = "20260708"
 ICON_NAME = "ImatestAnalyzer_icon.ico"
 
 
@@ -173,19 +173,9 @@ class Extractor:
             for path, rows in file_contents.items():
                 if rule["light"].upper() not in [p.upper() for p in os.path.normpath(path).split(os.sep)]:
                     continue
-                if rule["type"] == "mtf_multi_row":
-                    a_col, a_key = rule["anchor"]
-                    c_idx = self.reader.excel_to_index(a_col + "1")[1]
-                    anchor_values = a_key if isinstance(a_key, list) else [a_key]
-                    if any(len(r) > c_idx and str(r[c_idx]).strip() in anchor_values for r in rows):
-                        file_info = files_df[files_df["path"] == path].iloc[0]
-                        eligible_files.append({"path": path, "rows": rows, "ctime": file_info["ctime"], "name": file_info["name"]})
-                else:
-                    a_coord, a_key = rule["anchor"]
-                    r, c = self.reader.excel_to_index(a_coord)
-                    if len(rows) > r and len(rows[r]) > c and str(rows[r][c]).strip() == a_key:
-                        file_info = files_df[files_df["path"] == path].iloc[0]
-                        eligible_files.append({"path": path, "rows": rows, "ctime": file_info["ctime"], "name": file_info["name"]})
+                if self.file_matches_rule(rule, rows):
+                    file_info = files_df[files_df["path"] == path].iloc[0]
+                    eligible_files.append({"path": path, "rows": rows, "ctime": file_info["ctime"], "name": file_info["name"]})
 
             eligible_files = sorted(eligible_files, key=lambda x: x["ctime"])
             if not eligible_files:
@@ -330,6 +320,24 @@ class Extractor:
             log["系統錯誤"] = str(e)
 
         return res, log
+
+    @staticmethod
+    def file_matches_rule(rule: Dict, rows: list) -> bool:
+        """判斷某 CSV 內容是否符合該 rule 的錨點，供分析與檔案設定頁預設分配共用同一套判斷。"""
+        reader = Reader()
+        try:
+            if rule["type"] == "mtf_multi_row":
+                a_col, a_key = rule["anchor"]
+                c_idx = reader.excel_to_index(a_col + "1")[1]
+                anchor_values = a_key if isinstance(a_key, list) else [a_key]
+                return any(
+                    len(r) > c_idx and str(r[c_idx]).strip() in anchor_values for r in rows
+                )
+            a_coord, a_key = rule["anchor"]
+            r, c = reader.excel_to_index(a_coord)
+            return len(rows) > r and len(rows[r]) > c and str(rows[r][c]).strip() == a_key
+        except Exception:
+            return False
 
     def _get_v(self, rows, c):
         try:
@@ -704,12 +712,31 @@ class FileAssignTab(ttk.Frame):
         for _, row in (files_df.sort_values("ctime") if not files_df.empty else files_df).iterrows():
             pool.setdefault(row["light"], []).append(row["path"])
 
-        # 每條規則依其 light 取前 3 個檔案對應三輪
+        # 讀取候選 CSV 內容以套用錨點驗證（與分析判讀同一套邏輯，避免預設路徑與判讀依據不一致）
+        contents_cache: Dict[str, list] = {}
+
+        def _rows_of(p: str) -> list:
+            if p not in contents_cache:
+                try:
+                    with open(p, "r", encoding="utf-8-sig", errors="ignore") as fh:
+                        contents_cache[p] = list(csv.reader(fh))
+                except Exception:
+                    contents_cache[p] = []
+            return contents_cache[p]
+
+        # 每條規則：從該 light 候選檔中挑出「錨點驗證通過」的，依 ctime 取前 3 個對應三輪
         for rule in TEST_RULES:
-            paths = pool.get(rule["light"], [])
-            for i, rl in enumerate(self.ROUNDS):
-                if i < len(paths):
-                    self._assign[(rule["id"], rl)] = paths[i]
+            candidates = pool.get(rule["light"], [])
+            matched = [p for p in candidates if Extractor.file_matches_rule(rule, _rows_of(p))]
+            if rule["type"] == "mtf_multi_row":
+                # MTF 的三輪來自同一檔內多個匹配列，設定頁三輪皆預填同一檔以對齊判讀
+                if matched:
+                    for rl in self.ROUNDS:
+                        self._assign[(rule["id"], rl)] = matched[0]
+            else:
+                for i, rl in enumerate(self.ROUNDS):
+                    if i < len(matched):
+                        self._assign[(rule["id"], rl)] = matched[i]
 
         # 掃描 AE txt 檔並預設分配
         if base_path:
@@ -752,9 +779,9 @@ class FileAssignTab(ttk.Frame):
                 row_f = ttk.Frame(self._scroll_frame, padding=(20, 3, 8, 3))
                 row_f.pack(fill=X)
                 ttk.Label(row_f, text=rl, font=("Microsoft JhengHei", 10), width=10, anchor=W).pack(side=LEFT)
-                ttk.Entry(row_f, textvariable=var, font=("Microsoft JhengHei", 9), state="readonly").pack(
-                    side=LEFT, fill=X, expand=True, padx=(6, 8)
-                )
+                entry = ttk.Entry(row_f, textvariable=var, font=("Microsoft JhengHei", 9))
+                entry.pack(side=LEFT, fill=X, expand=True, padx=(6, 8))
+                entry.xview_moveto(1.0)
                 ttk.Button(
                     row_f, text="選擇檔案", bootstyle=SECONDARY, width=10,
                     command=lambda k=key, r=rule: self._pick_file(k, r),
@@ -782,9 +809,9 @@ class FileAssignTab(ttk.Frame):
             row_f = ttk.Frame(self._scroll_frame, padding=(20, 3, 8, 3))
             row_f.pack(fill=X)
             ttk.Label(row_f, text=rl, font=("Microsoft JhengHei", 10), width=10, anchor=W).pack(side=LEFT)
-            ttk.Entry(row_f, textvariable=var, font=("Microsoft JhengHei", 9), state="readonly").pack(
-                side=LEFT, fill=X, expand=True, padx=(6, 8)
-            )
+            entry = ttk.Entry(row_f, textvariable=var, font=("Microsoft JhengHei", 9))
+            entry.pack(side=LEFT, fill=X, expand=True, padx=(6, 8))
+            entry.xview_moveto(1.0)
             ttk.Button(
                 row_f, text="選擇檔案", bootstyle=SECONDARY, width=10,
                 command=lambda r=rl: self._pick_ae_file(r),
@@ -843,7 +870,23 @@ class FileAssignTab(ttk.Frame):
                 result.setdefault(rule_id, {})[rl] = path
         return result
 
+    def _sync_vars_to_assign(self):
+        """將所有 Entry 目前顯示的文字（含使用者手動輸入/貼上的路徑）同步回內部分配表。"""
+        for key, var in self._path_vars.items():
+            path = var.get().strip()
+            if path:
+                self._assign[key] = path
+            else:
+                self._assign.pop(key, None)
+        for rl, var in self._ae_vars.items():
+            path = var.get().strip()
+            if path:
+                self._ae_assign[rl] = path
+            else:
+                self._ae_assign.pop(rl, None)
+
     def _apply(self):
+        self._sync_vars_to_assign()
         if self._on_apply:
             self._on_apply()
 
